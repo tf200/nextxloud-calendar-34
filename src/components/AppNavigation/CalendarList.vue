@@ -269,7 +269,7 @@ export default {
 				}
 
 				if (calendar.url.includes('app-generated--deck--board')) {
-					this.sortedCalendars.deck.push(calendar)
+					// Permanently discard Deck calendars
 					return
 				}
 
