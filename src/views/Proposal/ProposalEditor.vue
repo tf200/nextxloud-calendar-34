@@ -78,6 +78,14 @@
 							v-model="selectedProposal.description"
 							class="proposal-editor__proposal-description"
 							:label="t('calendar', 'Description')" />
+						<NcSelect
+							v-if="projectsEnabled"
+							v-model="selectedProjectOption"
+							class="proposal-editor__proposal-project"
+							:options="projectOptions"
+							:label="t('calendar', 'Link to Project')"
+							track-by="id"
+							label-outside />
 						<div class="proposal-editor__proposal-location-container">
 							<NcTextField
 								v-if="!settingsStore.talkEnabled || !modalEditLocationState"
@@ -227,6 +235,10 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcModal from '@nextcloud/vue/components/NcModal'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
+import axios from '@nextcloud/axios'
+import { generateUrl } from '@nextcloud/router'
+import { loadState } from '@nextcloud/initial-state'
 import DurationSelector from '@/components/Editor/DurationSelector.vue'
 import InviteesListSearch from '@/components/Editor/Invitees/InviteesListSearch.vue'
 import ProposalDateItem from '@/components/Proposal/ProposalDateItem.vue'
@@ -269,6 +281,7 @@ export default {
 		NcModal,
 		NcTextField,
 		NcTextArea,
+		NcSelect,
 		DurationSelector,
 		FullCalendar,
 		InviteesListSearch,
@@ -305,6 +318,8 @@ export default {
 			calendarSpanMin: 1, // Minimum days that can be shown
 			calendarSpanDays: 7, // Currently applied span (derived)
 			screenWidth: window.innerWidth, // Track screen width
+			projectsEnabled: loadState('calendar', 'projects_enabled', false),
+			projects: [] as any[],
 			showDeleteDialog: false,
 			pendingDeleteProposal: null as Proposal | null,
 			showConvertDialog: false,
@@ -373,6 +388,25 @@ export default {
 				return true
 			} else {
 				return false
+			}
+		},
+
+		projectOptions(): Array<{ id: number | null, label: string }> {
+			return this.projects.map((p: any) => ({ id: p.id, label: p.name }))
+		},
+
+		selectedProjectOption: {
+			get(): { id: number | null, label: string } | null {
+				if (!this.selectedProposal || !this.selectedProposal.projectId) {
+					return null
+				}
+				const project = this.projects.find((p: any) => p.id === this.selectedProposal.projectId)
+				return project ? { id: project.id, label: project.name } : null
+			},
+			set(val: { id: number | null, label: string } | null) {
+				if (this.selectedProposal) {
+					this.selectedProposal.projectId = val ? val.id : null
+				}
 			}
 		},
 
@@ -561,6 +595,18 @@ export default {
 	methods: {
 		t,
 
+		async fetchProjects() {
+			if (!this.projectsEnabled) {
+				return
+			}
+			try {
+				const response = await axios.get(generateUrl('/apps/projectcreatoraio/api/v1/projects/mine'))
+				this.projects = response.data
+			} catch (error) {
+				console.error('Failed to fetch projects list:', error)
+			}
+		},
+
 		onWindowResize(): void {
 			this.screenWidth = window.innerWidth
 		},
@@ -568,6 +614,7 @@ export default {
 		onModalOpen() {
 			this.selectedProposal = this.proposalStore.modalProposal
 			this.modalMode = this.proposalStore.modalMode
+			this.fetchProjects()
 
 			// Ensure proposal has default values to prevent null binding errors
 			if (this.selectedProposal) {

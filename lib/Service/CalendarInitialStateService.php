@@ -79,6 +79,7 @@ class CalendarInitialStateService {
 
 		$talkApiVersion = version_compare($this->appManager->getAppVersion('spreed'), '12.0.0', '>=') ? 'v4' : 'v1';
 		$tasksEnabled = $this->appManager->isEnabledForUser('tasks');
+		$projectsEnabled = $this->appManager->isEnabledForUser('projectcreatoraio');
 
 		$circleVersion = $this->appManager->getAppVersion('circles');
 		$isCirclesEnabled = $this->appManager->isEnabledForUser('circles') === true;
@@ -117,6 +118,7 @@ class CalendarInitialStateService {
 		$this->initialStateService->provideInitialState('show_tasks', $showTasks);
 		$this->initialStateService->provideInitialState('tasks_sidebar', $tasksSidebar);
 		$this->initialStateService->provideInitialState('tasks_enabled', $tasksEnabled);
+		$this->initialStateService->provideInitialState('projects_enabled', $projectsEnabled);
 		$this->initialStateService->provideInitialState('hide_event_export', $hideEventExport);
 		$this->initialStateService->provideInitialState('force_event_alarm_type', $forceEventAlarmType);
 		if (!is_null($this->userId)) {

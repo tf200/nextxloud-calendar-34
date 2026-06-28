@@ -11,6 +11,9 @@ import { Proposal } from '@/models/proposals/proposals'
 import { proposalService } from '@/services/proposalService'
 import { createRoomFromProposal, generateRoomUrl } from '@/services/talkService'
 import useSettingsStore from '@/store/settings'
+import axios from '@nextcloud/axios'
+import { generateUrl } from '@nextcloud/router'
+import { loadState } from '@nextcloud/initial-state'
 
 export default defineStore('proposal', () => {
 	const modalVisible = ref(false)
@@ -113,8 +116,25 @@ export default defineStore('proposal', () => {
 		}
 
 		if (settingsStore.talkEnabled && proposal.location === 'Talk conversation') {
-			const talkRoom = await createRoomFromProposal(proposal)
-			options.talkRoomUri = generateRoomUrl(talkRoom)
+			let talkRoomUri = null
+			const projectsEnabled = loadState('calendar', 'projects_enabled', false)
+			if (projectsEnabled && proposal.projectId) {
+				try {
+					const response = await axios.get(generateUrl('/apps/projectcreatoraio/api/v1/projects/' + proposal.projectId))
+					const project = response.data
+					if (project && project.talk_conversation_token) {
+						talkRoomUri = generateRoomUrl(project.talk_conversation_token)
+					}
+				} catch (err) {
+					console.error('Failed to fetch linked project Talk room', err)
+				}
+			}
+
+			if (!talkRoomUri) {
+				const talkRoom = await createRoomFromProposal(proposal)
+				talkRoomUri = generateRoomUrl(talkRoom)
+			}
+			options.talkRoomUri = talkRoomUri
 		}
 
 		await proposalService.convertProposal(proposal, date, options)
