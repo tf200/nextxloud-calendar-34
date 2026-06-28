@@ -141,6 +141,11 @@
 					:name="t('calendar', 'Delegation')">
 					<SettingsDelegationSection />
 				</NcAppSettingsSection>
+				<NcAppSettingsSection
+					id="settings-modal-cloudsync"
+					:name="t('calendar', 'Cloud Sync')">
+					<SettingsCloudSyncSection />
+				</NcAppSettingsSection>
 				<EventLegend />
 				<ShortcutOverview />
 			</NcAppSettingsDialog>
@@ -173,6 +178,7 @@ import CogIcon from 'vue-material-design-icons/CogOutline.vue'
 import CalendarPicker from '../Shared/CalendarPicker.vue'
 import EventLegend from './Settings/EventLegend.vue'
 import SettingsAttachmentsFolder from './Settings/SettingsAttachmentsFolder.vue'
+import SettingsCloudSyncSection from './Settings/SettingsCloudSyncSection.vue'
 import SettingsDelegationSection from './Settings/SettingsDelegationSection.vue'
 import SettingsImportSection from './Settings/SettingsImportSection.vue'
 import SettingsTimezoneSelect from './Settings/SettingsTimezoneSelect.vue'
@@ -208,6 +214,7 @@ export default {
 		SettingsTimezoneSelect,
 		SettingsAttachmentsFolder,
 		SettingsDelegationSection,
+		SettingsCloudSyncSection,
 		ShortcutOverview,
 		CogIcon,
 		NcFormBox,

@@ -49,6 +49,7 @@
 	</dependencies>
 	<background-jobs>
 		<job>OCA\Calendar\BackgroundJob\CleanUpOutdatedBookingsJob</job>
+		<job>OCA\Calendar\BackgroundJob\SyncCalendarsCronJob</job>
 	</background-jobs>
 	<navigations>
 		<navigation>

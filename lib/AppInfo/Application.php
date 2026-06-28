@@ -13,10 +13,12 @@ use OCA\Calendar\Events\BeforeAppointmentBookedEvent;
 use OCA\Calendar\Listener\AppointmentBookedListener;
 use OCA\Calendar\Listener\CalendarReferenceListener;
 use OCA\Calendar\Listener\NotifyPushListener;
+use OCA\Calendar\Listener\SyncCalendarObjectListener;
 use OCA\Calendar\Listener\UserDeletedListener;
 use OCA\Calendar\Notification\Notifier;
 use OCA\Calendar\Profile\AppointmentsAction;
 use OCA\Calendar\Reference\ReferenceProvider;
+use OCA\Calendar\Settings\AdminSettings;
 use OCA\Calendar\UserMigration\Migrator;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -63,9 +65,15 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(CalendarObjectUpdatedEvent::class, NotifyPushListener::class);
 		$context->registerEventListener(CalendarObjectDeletedEvent::class, NotifyPushListener::class);
 
+		$context->registerEventListener(CalendarObjectCreatedEvent::class, SyncCalendarObjectListener::class);
+		$context->registerEventListener(CalendarObjectUpdatedEvent::class, SyncCalendarObjectListener::class);
+		$context->registerEventListener(CalendarObjectDeletedEvent::class, SyncCalendarObjectListener::class);
+
 		$context->registerNotifierService(Notifier::class);
 
 		$context->registerUserMigrator(Migrator::class);
+
+		$context->registerAdminSettings(AdminSettings::class);
 	}
 
 	/**

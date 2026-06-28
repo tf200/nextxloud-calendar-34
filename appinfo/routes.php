@@ -45,6 +45,14 @@ return [
 		['name' => 'settings#setConfig', 'url' => '/v1/config/{key}', 'verb' => 'POST'],
 		// Tools
 		['name' => 'email#sendEmailPublicLink', 'url' => '/v1/public/sendmail', 'verb' => 'POST'],
+		// Admin config
+		['name' => 'admin_config#setCredentials', 'url' => '/v1/admin/oauth/credentials', 'verb' => 'POST'],
+		['name' => 'admin_config#getCredentials', 'url' => '/v1/admin/oauth/credentials', 'verb' => 'GET'],
+		// OAuth connect & sync endpoints
+		['name' => 'oauth#initiate', 'url' => '/oauth/connect/{provider}', 'verb' => 'GET'],
+		['name' => 'oauth#callback', 'url' => '/oauth/callback/{provider}', 'verb' => 'GET'],
+		['name' => 'oauth#disconnect', 'url' => '/oauth/disconnect/{provider}', 'verb' => 'POST'],
+		['name' => 'oauth#status', 'url' => '/oauth/status', 'verb' => 'GET'],
 	],
 	'resources' => [
 		'appointmentConfig' => ['url' => '/v1/appointment_configs']
