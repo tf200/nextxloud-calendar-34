@@ -83,9 +83,10 @@
 							v-model="selectedProjectOption"
 							class="proposal-editor__proposal-project"
 							:options="projectOptions"
-							:label="t('calendar', 'Link to Project')"
-							track-by="id"
-							label-outside />
+							:inputLabel="t('calendar', 'Link to Project')"
+							:placeholder="t('calendar', 'Select project')"
+							trackBy="id"
+							:labelOutside="true" />
 						<div class="proposal-editor__proposal-location-container">
 							<NcTextField
 								v-if="!settingsStore.talkEnabled || !modalEditLocationState"
