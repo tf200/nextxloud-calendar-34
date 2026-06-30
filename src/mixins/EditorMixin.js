@@ -784,6 +784,8 @@ export default {
 				calendarObjectInstance: this.calendarObjectInstance,
 				description,
 			})
+
+			updateDefaultAlarm(this.calendarObject.calendarId, this.calendarObjectInstance)
 		},
 		/**
 		 * Updates the location of this event
@@ -795,6 +797,8 @@ export default {
 				calendarObjectInstance: this.calendarObjectInstance,
 				location,
 			})
+
+			updateDefaultAlarm(this.calendarObject.calendarId, this.calendarObjectInstance)
 		},
 		/**
 		 * Updates the start date of this event

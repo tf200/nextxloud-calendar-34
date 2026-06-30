@@ -107,10 +107,20 @@
 						:modelValue="selectedDefaultReminderPartDayOption"
 						:disabled="savingDefaultReminderPartDay"
 						:clearable="false"
-						:inputLabel="$t('calendar', 'Default reminder for part-day events')"
+						:inputLabel="$t('calendar', 'Default reminder for events without Talk')"
 						inputId="value"
 						label="label"
 						@option:selected="changeDefaultReminderPartDay" />
+					<NcSelect
+						v-if="talkEnabled"
+						:options="defaultReminderTalkOptions"
+						:modelValue="selectedDefaultReminderTalkOption"
+						:disabled="savingDefaultReminderTalk"
+						:clearable="false"
+						:inputLabel="$t('calendar', 'Default reminder for events with Talk')"
+						inputId="value"
+						label="label"
+						@option:selected="changeDefaultReminderTalk" />
 					<NcSelect
 						:options="defaultReminderFullDayOptions"
 						:modelValue="selectedDefaultReminderFullDayOption"
@@ -241,6 +251,7 @@ export default {
 			savingPopover: false,
 			savingSlotDuration: false,
 			savingDefaultReminderPartDay: false,
+			savingDefaultReminderTalk: false,
 			savingDefaultReminderFullDay: false,
 			savingDefaultCalendarId: false,
 			savingWeekend: false,
@@ -264,8 +275,10 @@ export default {
 			'showWeekNumbers',
 			'slotDuration',
 			'defaultReminderPartDay',
+			'defaultReminderTalk',
 			'defaultReminderFullDay',
 			'defaultReminder',
+			'talkEnabled',
 		]),
 
 		...mapState(useSettingsStore, {
@@ -348,6 +361,10 @@ export default {
 			return this.getDefaultReminderOptions(false)
 		},
 
+		defaultReminderTalkOptions() {
+			return this.getDefaultReminderOptions(false)
+		},
+
 		defaultReminderFullDayOptions() {
 			return this.getDefaultReminderOptions(true)
 		},
@@ -355,6 +372,11 @@ export default {
 		selectedDefaultReminderPartDayOption() {
 			const selectedValue = this.defaultReminderPartDay ?? this.defaultReminder
 			return this.defaultReminderPartDayOptions.find((o) => o.value === selectedValue)
+		},
+
+		selectedDefaultReminderTalkOption() {
+			const selectedValue = this.defaultReminderTalk ?? '900'
+			return this.defaultReminderTalkOptions.find((o) => o.value === selectedValue)
 		},
 
 		selectedDefaultReminderFullDayOption() {
@@ -605,6 +627,31 @@ export default {
 				console.error(error)
 				showError(this.$t('calendar', 'New setting was not saved successfully.'))
 				this.savingDefaultReminderPartDay = false
+			}
+		},
+
+		/**
+		 * Updates the setting for the default reminder for events with Talk
+		 *
+		 * @param {object} option The new selected value
+		 */
+		async changeDefaultReminderTalk(option) {
+			if (!option) {
+				return
+			}
+
+			// change to loading status
+			this.savingDefaultReminderTalk = true
+
+			try {
+				await this.settingsStore.setDefaultReminderTalk({
+					defaultReminderTalk: option.value,
+				})
+				this.savingDefaultReminderTalk = false
+			} catch (error) {
+				console.error(error)
+				showError(this.$t('calendar', 'New setting was not saved successfully.'))
+				this.savingDefaultReminderTalk = false
 			}
 		},
 

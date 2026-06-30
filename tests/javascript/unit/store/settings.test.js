@@ -50,6 +50,7 @@ describe('store/settings test suite', () => {
 			slotDuration: null,
 			defaultReminder: null,
 			defaultReminderPartDay: null,
+			defaultReminderTalk: null,
 			defaultReminderFullDay: null,
 			tasksEnabled: false,
 			tasksSidebar: true,
@@ -80,6 +81,7 @@ describe('store/settings test suite', () => {
 			slotDuration: null,
 			defaultReminder: null,
 			defaultReminderPartDay: null,
+			defaultReminderTalk: null,
 			defaultReminderFullDay: null,
 			tasksEnabled: false,
 			tasksSidebar: true,
@@ -108,6 +110,7 @@ describe('store/settings test suite', () => {
 			slotDuration: '00:30:00',
 			defaultReminder: '-600',
 			defaultReminderPartDay: undefined,
+			defaultReminderTalk: undefined,
 			defaultReminderFullDay: undefined,
 			talkEnabled: false,
 			tasksEnabled: true,
@@ -138,6 +141,7 @@ Initial settings:
 	- SlotDuration: 00:30:00
 	- DefaultReminder: -600
 	- DefaultReminderPartDay: undefined
+	- DefaultReminderTalk: undefined
 	- DefaultReminderFullDay: undefined
 	- TalkEnabled: false
 	- TasksEnabled: true
@@ -162,6 +166,7 @@ Initial settings:
 			slotDuration: '00:30:00',
 			defaultReminder: '-600',
 			defaultReminderPartDay: '-600',
+			defaultReminderTalk: '900',
 			defaultReminderFullDay: '-600',
 			talkEnabled: false,
 			tasksEnabled: true,

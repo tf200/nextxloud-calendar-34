@@ -75,6 +75,8 @@ class SettingsController extends Controller {
 				return $this->setDefaultReminder($value);
 			case 'defaultReminderPartDay':
 				return $this->setDefaultReminderPartDay($value);
+			case 'defaultReminderTalk':
+				return $this->setDefaultReminderTalk($value);
 			case 'defaultReminderFullDay':
 				return $this->setDefaultReminderFullDay($value);
 			case 'showTasks':
@@ -408,6 +410,31 @@ class SettingsController extends Controller {
 				$this->userId,
 				$this->appName,
 				'defaultReminderPartDay',
+				$value
+			);
+		} catch (\Exception $e) {
+			return new JSONResponse([], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+
+		return new JSONResponse();
+	}
+
+	/**
+	 * sets defaultReminderTalk for user
+	 *
+	 * @param string $value User-selected option for the default reminder with talk
+	 * @return JSONResponse
+	 */
+	private function setDefaultReminderTalk(string $value):JSONResponse {
+		if (!$this->isValidReminderValue($value)) {
+			return new JSONResponse([], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		try {
+			$this->config->setUserValue(
+				$this->userId,
+				$this->appName,
+				'defaultReminderTalk',
 				$value
 			);
 		} catch (\Exception $e) {

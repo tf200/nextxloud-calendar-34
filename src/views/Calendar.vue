@@ -332,6 +332,7 @@ export default {
 			slotDuration: loadState('calendar', 'slot_duration'),
 			defaultReminder: loadState('calendar', 'default_reminder'),
 			defaultReminderPartDay: loadState('calendar', 'default_reminder_part_day', loadState('calendar', 'default_reminder')),
+			defaultReminderTalk: loadState('calendar', 'default_reminder_talk', '900'),
 			defaultReminderFullDay: loadState('calendar', 'default_reminder_full_day', loadState('calendar', 'default_reminder')),
 			talkEnabled: loadState('calendar', 'talk_enabled'),
 			tasksEnabled: loadState('calendar', 'tasks_enabled'),

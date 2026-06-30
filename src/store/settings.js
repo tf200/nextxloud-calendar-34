@@ -34,6 +34,7 @@ export default defineStore('settings', {
 			skipPopover: null,
 			slotDuration: null,
 			defaultReminderPartDay: null,
+			defaultReminderTalk: null,
 			defaultReminderFullDay: null,
 			// Legacy fallback for users that have not saved separate part/full-day defaults yet.
 			defaultReminder: null,
@@ -241,6 +242,21 @@ export default defineStore('settings', {
 		},
 
 		/**
+		 * Updates the user's preferred default reminder for events with Talk
+		 *
+		 * @param {object} data The destructuring object
+		 * @param {string} data.defaultReminderTalk The new default reminder with talk
+		 */
+		async setDefaultReminderTalk({ defaultReminderTalk }) {
+			if (this.defaultReminderTalk === defaultReminderTalk) {
+				return
+			}
+
+			await setConfig('defaultReminderTalk', defaultReminderTalk)
+			this.defaultReminderTalk = defaultReminderTalk
+		},
+
+		/**
 		 * Updates the user's preferred default reminder for full-day events
 		 *
 		 * @param {object} data The destructuring object
@@ -348,7 +364,7 @@ export default defineStore('settings', {
 		 * @param {boolean} data.showResources Show or hide the resources tab
 		 * @param {string} data.publicCalendars
 		 */
-		loadSettingsFromServer({ appVersion, eventLimit, firstRun, showWeekNumbers, showTasks, showWeekends, skipPopover, slotDuration, defaultReminder, defaultReminderPartDay, defaultReminderFullDay, talkEnabled, tasksEnabled, timezone, hideEventExport, forceEventAlarmType, disableAppointments, tasksSidebar, canSubscribeLink, attachmentsFolder, showResources, publicCalendars }) {
+		loadSettingsFromServer({ appVersion, eventLimit, firstRun, showWeekNumbers, showTasks, showWeekends, skipPopover, slotDuration, defaultReminder, defaultReminderPartDay, defaultReminderTalk, defaultReminderFullDay, talkEnabled, tasksEnabled, timezone, hideEventExport, forceEventAlarmType, disableAppointments, tasksSidebar, canSubscribeLink, attachmentsFolder, showResources, publicCalendars }) {
 			logInfo(`
 Initial settings:
 	- AppVersion: ${appVersion}
@@ -361,6 +377,7 @@ Initial settings:
 	- SlotDuration: ${slotDuration}
 	- DefaultReminder: ${defaultReminder}
 	- DefaultReminderPartDay: ${defaultReminderPartDay}
+	- DefaultReminderTalk: ${defaultReminderTalk}
 	- DefaultReminderFullDay: ${defaultReminderFullDay}
 	- TalkEnabled: ${talkEnabled}
 	- TasksEnabled: ${tasksEnabled}
@@ -385,6 +402,7 @@ Initial settings:
 			this.slotDuration = slotDuration
 			this.defaultReminder = defaultReminder
 			this.defaultReminderPartDay = defaultReminderPartDay ?? defaultReminder
+			this.defaultReminderTalk = defaultReminderTalk ?? '900'
 			this.defaultReminderFullDay = defaultReminderFullDay ?? defaultReminder
 			this.talkEnabled = talkEnabled
 			this.tasksEnabled = tasksEnabled

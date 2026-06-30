@@ -5,6 +5,7 @@
 
 import { AttendeeProperty, Property } from '@nextcloud/calendar-js'
 import { translate as t } from '@nextcloud/l10n'
+import { containsRoomUrl } from '../services/talkService.ts'
 import useCalendarObjectInstanceStore from '../store/calendarObjectInstance.js'
 import useCalendarsStore from '../store/calendars.js'
 import useSettingsStore from '../store/settings.js'
@@ -224,6 +225,8 @@ export function updateDefaultAlarm(calendarId, calendarObjectInstance) {
 	const defaultReminder = getDefaultReminderForEvent({
 		calendar,
 		isAllDay: calendarObjectInstance.isAllDay,
+		location: calendarObjectInstance.location,
+		description: calendarObjectInstance.description,
 	})
 
 	if (defaultReminder === null || isNaN(defaultReminder)) {
@@ -266,22 +269,41 @@ export function updateDefaultAlarm(calendarId, calendarObjectInstance) {
  * @param {object} data The destructuring object
  * @param {object|undefined} data.calendar The selected calendar
  * @param {boolean} data.isAllDay Whether the event is all-day
+ * @param {string|null|undefined} data.location The event's location
+ * @param {string|null|undefined} data.description The event's description
  * @return {number|null}
  */
-export function getDefaultReminderForEvent({ calendar, isAllDay }) {
+export function getDefaultReminderForEvent({ calendar, isAllDay, location, description }) {
 	const settingsStore = useSettingsStore()
 
-	if (isAfterVersion(34) && calendar) {
-		if (isAllDay && calendar.dav.defaultAlarmFullDay !== undefined) {
+	if (isAllDay) {
+		if (isAfterVersion(34) && calendar && calendar.dav.defaultAlarmFullDay !== undefined) {
 			return calendar.dav.defaultAlarmFullDay
 		}
 
-		if (!isAllDay && calendar.dav.defaultAlarmPartDay !== undefined) {
-			return calendar.dav.defaultAlarmPartDay
+		const globalDefaultReminder = parseInt(settingsStore.defaultReminderFullDay)
+		if (!isNaN(globalDefaultReminder)) {
+			return globalDefaultReminder
 		}
+
+		const legacyDefaultReminder = parseInt(settingsStore.defaultReminder)
+		return isNaN(legacyDefaultReminder) ? null : legacyDefaultReminder
 	}
 
-	const globalDefaultReminder = parseInt(isAllDay ? settingsStore.defaultReminderFullDay : settingsStore.defaultReminderPartDay)
+	const hasTalk = containsRoomUrl(location) || containsRoomUrl(description)
+	if (hasTalk) {
+		const globalDefaultReminderTalk = parseInt(settingsStore.defaultReminderTalk)
+		if (!isNaN(globalDefaultReminderTalk)) {
+			return globalDefaultReminderTalk
+		}
+		return 900 // Fallback: 15 minutes
+	}
+
+	if (isAfterVersion(34) && calendar && calendar.dav.defaultAlarmPartDay !== undefined) {
+		return calendar.dav.defaultAlarmPartDay
+	}
+
+	const globalDefaultReminder = parseInt(settingsStore.defaultReminderPartDay)
 	if (!isNaN(globalDefaultReminder)) {
 		return globalDefaultReminder
 	}

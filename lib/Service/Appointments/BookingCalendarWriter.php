@@ -181,12 +181,23 @@ class BookingCalendarWriter {
 			]
 		);
 
-		$defaultReminder = $this->config->getUserValue(
-			$config->getUserId(),
-			Application::APP_ID,
-			'defaultReminder',
-			'none'
-		);
+		$hasTalk = $config->getCreateTalkRoom() || !empty($booking->getTalkUrl());
+		if ($hasTalk) {
+			$defaultReminder = $this->config->getUserValue(
+				$config->getUserId(),
+				Application::APP_ID,
+				'defaultReminderTalk',
+				'900'
+			);
+		} else {
+			$defaultReminder = $this->config->getUserValue(
+				$config->getUserId(),
+				Application::APP_ID,
+				'defaultReminderPartDay',
+				'3600'
+			);
+		}
+
 		if ($defaultReminder !== 'none') {
 			/** @var VAlarm $alarm */
 			$alarm = $vCalendar->createComponent('VALARM');
