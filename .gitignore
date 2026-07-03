@@ -111,3 +111,5 @@ css/public
 
 /playwright-report
 /test-results
+.env
+
