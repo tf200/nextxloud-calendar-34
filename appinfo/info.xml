@@ -60,4 +60,7 @@
 			<order>5</order>
 		</navigation>
 	</navigations>
+	<settings>
+		<admin>OCA\Calendar\Settings\AdminSettings</admin>
+	</settings>
 </info>
