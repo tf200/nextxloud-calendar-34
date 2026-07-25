@@ -46,6 +46,17 @@ class ProposalMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	public function fetchByUserIdAndProjectId(string $userId, int $projectId): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->tableName)
+			->where(
+				$qb->expr()->eq('uid', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)),
+				$qb->expr()->eq('project_id', $qb->createNamedParameter($projectId, IQueryBuilder::PARAM_INT))
+			);
+		return $this->findEntities($qb);
+	}
+
 	public function deleteById(string $userId, int $id): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete($this->tableName)

@@ -200,6 +200,56 @@ class ProposalControllerTest extends TestCase {
 		$this->assertEquals($proposalsJson, $response->getData());
 	}
 
+	public function testProjectSuccess(): void {
+		$items = [
+			['@type' => 'Meeting', 'id' => 12, 'projectId' => 6],
+		];
+
+		$this->userSession->expects($this->once())
+			->method('isLoggedIn')
+			->willReturn(true);
+		$this->userSession->expects($this->once())
+			->method('getUser')
+			->willReturn($this->user);
+		$this->proposalService->expects($this->once())
+			->method('listProjectItems')
+			->with($this->user, 6, 100, 20)
+			->willReturn($items);
+
+		$response = $this->controller->project(6, 200, 20);
+
+		$this->assertEquals(Http::STATUS_OK, $response->getStatus());
+		$this->assertEquals($items, $response->getData());
+	}
+
+	public function testProjectRejectsInvalidParameters(): void {
+		$this->userSession->expects($this->exactly(3))
+			->method('isLoggedIn')
+			->willReturn(true);
+		$this->userSession->expects($this->exactly(3))
+			->method('getUser')
+			->willReturn($this->user);
+		$this->proposalService->expects($this->never())
+			->method('listProjectItems');
+
+		foreach ([[0, 20, 0], [6, 0, 0], [6, 20, -1]] as [$projectId, $limit, $offset]) {
+			$response = $this->controller->project($projectId, $limit, $offset);
+			$this->assertEquals(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		}
+	}
+
+	public function testProjectRequiresAuthentication(): void {
+		$this->userSession->expects($this->once())
+			->method('isLoggedIn')
+			->willReturn(false);
+		$this->proposalService->expects($this->never())
+			->method('listProjectItems');
+
+		$response = $this->controller->project(6);
+
+		$this->assertEquals(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+	}
+
 	public function testFetchByTokenSuccess(): void {
 		$proposal = $this->createMock(ProposalObject::class);
 		$proposalUser = $this->createMock(IUser::class);

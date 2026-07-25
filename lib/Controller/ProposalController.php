@@ -83,6 +83,31 @@ class ProposalController extends ApiController {
 	}
 
 	/**
+	 * Retrieve proposals and confirmed meetings linked to a project.
+	 */
+	#[ApiRoute(verb: 'GET', url: '/proposal/project/{projectId}', root: '/calendar')]
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 10, period: 60)]
+	public function project(int $projectId, int $limit = 20, int $offset = 0): JSONResponse {
+		$authorization = $this->authorize();
+		if ($authorization instanceof JSONResponse) {
+			return $authorization;
+		}
+		if ($projectId <= 0 || $limit <= 0 || $offset < 0) {
+			return new JSONResponse(['error' => 'Invalid pagination or project identifier'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$items = $this->proposalService->listProjectItems(
+			$authorization,
+			$projectId,
+			min($limit, 100),
+			$offset,
+		);
+
+		return new JSONResponse($items, Http::STATUS_OK);
+	}
+
+	/**
 	 * Fetch a proposal by its token
 	 */
 	#[ApiRoute(verb: 'POST', url: '/proposal/fetch', root: '/calendar')]

@@ -11,6 +11,8 @@ namespace OCA\Calendar\Service\Proposal;
 
 use ChristophWurst\Nextcloud\Testing\TestCase;
 use OC\Calendar\Manager;
+use OCA\Calendar\Db\ProjectEventEntry;
+use OCA\Calendar\Db\ProjectEventMapper;
 use OCA\Calendar\Db\ProposalDateEntry;
 use OCA\Calendar\Db\ProposalDateMapper;
 use OCA\Calendar\Db\ProposalDetailsEntry;
@@ -31,6 +33,7 @@ use OCA\Calendar\Objects\Proposal\ProposalResponseDateCollection;
 use OCA\Calendar\Objects\Proposal\ProposalResponseObject;
 use OCA\Calendar\Objects\Proposal\ProposalVoteCollection;
 use OCA\Calendar\Objects\Proposal\ProposalVoteObject;
+use OCP\Calendar\ICalendar;
 use OCP\Calendar\IManager;
 use OCP\Config\IUserConfig;
 use OCP\IAppConfig;
@@ -51,6 +54,7 @@ class ProposalServiceTest extends TestCase {
 	protected ProposalParticipantMapper|MockObject $proposalParticipantMapper;
 	protected ProposalDateMapper|MockObject $proposalDateMapper;
 	protected ProposalVoteMapper|MockObject $proposalVoteMapper;
+	protected ProjectEventMapper|MockObject $projectEventMapper;
 	protected IL10N|MockObject $l10n;
 	protected IURLGenerator|MockObject $urlGenerator;
 	protected IUserConfig|MockObject $userConfig;
@@ -70,6 +74,7 @@ class ProposalServiceTest extends TestCase {
 		$this->proposalParticipantMapper = $this->createMock(ProposalParticipantMapper::class);
 		$this->proposalDateMapper = $this->createMock(ProposalDateMapper::class);
 		$this->proposalVoteMapper = $this->createMock(ProposalVoteMapper::class);
+		$this->projectEventMapper = $this->createMock(ProjectEventMapper::class);
 		$this->l10n = $this->createMock(IL10N::class);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->userConfig = $this->createMock(IUserConfig::class);
@@ -90,6 +95,7 @@ class ProposalServiceTest extends TestCase {
 			$this->proposalParticipantMapper,
 			$this->proposalDateMapper,
 			$this->proposalVoteMapper,
+			$this->projectEventMapper,
 			$this->l10n,
 			$this->urlGenerator,
 			$this->userConfig,
@@ -158,6 +164,116 @@ class ProposalServiceTest extends TestCase {
 
 		$this->assertInstanceOf(ProposalCollection::class, $result);
 		$this->assertCount(0, $result);
+	}
+
+	public function testListProjectItemsMergesSortsAndPaginates(): void {
+		$proposalEntry = $this->createProposalEntry(1, 'Project proposal');
+		$proposalEntry->setProjectId(6);
+		$proposalEntry->setDuration(30);
+
+		$dateEntry = new ProposalDateEntry();
+		$dateEntry->setId(10);
+		$dateEntry->setPid(1);
+		$dateEntry->setUid('testuser');
+		$dateEntry->setDate((new \DateTimeImmutable('2026-07-25T10:00:00+00:00'))->getTimestamp());
+
+		$participantEntry = $this->createParticipantEntry(20, 1, 'proposal@example.com', 'secret-token');
+		$participantEntry->setName('Proposal participant');
+		$participantEntry->setAttendance('R');
+		$participantEntry->setStatus('P');
+		$participantEntry->setRealm('I');
+
+		$this->proposalMapper->expects($this->exactly(2))
+			->method('fetchByUserIdAndProjectId')
+			->with('testuser', 6)
+			->willReturn([$proposalEntry]);
+		$this->proposalParticipantMapper->expects($this->exactly(2))
+			->method('fetchByUserId')
+			->with('testuser')
+			->willReturn([$participantEntry]);
+		$this->proposalDateMapper->expects($this->exactly(2))
+			->method('fetchByUserId')
+			->with('testuser')
+			->willReturn([$dateEntry]);
+		$this->proposalVoteMapper->expects($this->exactly(2))
+			->method('fetchByUserId')
+			->with('testuser')
+			->willReturn([]);
+		$projectEvent = new ProjectEventEntry();
+		$projectEvent->setEventUid('meeting-uid');
+		$projectEvent->setProjectId(6);
+		$this->projectEventMapper->expects($this->exactly(2))
+			->method('fetchByProjectId')
+			->with(6)
+			->willReturn([$projectEvent]);
+
+		$matchingEvent = [
+			'id' => 30,
+			'uid' => 'meeting-uid',
+			'objects' => [[
+				'X-NEXTCLOUD-PROJECT-ID' => [['6', []]],
+				'DTSTART' => [new \DateTimeImmutable('2026-07-26T10:00:00+00:00'), []],
+				'DTEND' => [new \DateTimeImmutable('2026-07-26T11:00:00+00:00'), []],
+				'SUMMARY' => ['Confirmed meeting', []],
+				'DESCRIPTION' => ['Meeting description', []],
+				'LOCATION' => ['Meeting room', []],
+				'ATTENDEE' => [[
+					'mailto:alice@example.com',
+					['CN' => 'Alice', 'PARTSTAT' => 'ACCEPTED'],
+				]],
+			]],
+		];
+		$firstCalendar = $this->createMock(ICalendar::class);
+		$firstCalendar->method('isDeleted')->willReturn(false);
+		$firstCalendar->expects($this->exactly(2))
+			->method('search')
+			->with('', [], ['types' => ['VEVENT'], 'uid' => 'meeting-uid'])
+			->willReturn([$matchingEvent]);
+		$this->calendarManager->expects($this->exactly(2))
+			->method('getCalendarsForPrincipal')
+			->with('principals/users/testuser')
+			->willReturn([$firstCalendar]);
+
+		$firstPage = $this->service->listProjectItems($this->user, 6, 1, 0);
+
+		$this->assertCount(1, $firstPage);
+		$this->assertSame('Meeting', $firstPage[0]['@type']);
+		$this->assertSame(60, $firstPage[0]['duration']);
+		$this->assertSame('accepted', $firstPage[0]['participants'][0]['status']);
+
+		$secondPage = $this->service->listProjectItems($this->user, 6, 1, 1);
+
+		$this->assertCount(1, $secondPage);
+		$this->assertSame('MeetingProposal', $secondPage[0]['@type']);
+		$this->assertSame('proposal@example.com', $secondPage[0]['participants'][0]['address']);
+		$this->assertArrayNotHasKey('token', $secondPage[0]['participants'][0]);
+	}
+
+	public function testListProjectItemsExcludesCancelledMeetings(): void {
+		$this->proposalMapper->method('fetchByUserIdAndProjectId')->willReturn([]);
+		$this->proposalParticipantMapper->method('fetchByUserId')->willReturn([]);
+		$this->proposalDateMapper->method('fetchByUserId')->willReturn([]);
+		$this->proposalVoteMapper->method('fetchByUserId')->willReturn([]);
+		$projectEvent = new ProjectEventEntry();
+		$projectEvent->setEventUid('cancelled-uid');
+		$projectEvent->setProjectId(6);
+		$this->projectEventMapper->method('fetchByProjectId')->willReturn([$projectEvent]);
+		$calendar = $this->createMock(ICalendar::class);
+		$calendar->method('isDeleted')->willReturn(false);
+		$calendar->method('search')->willReturn([[
+			'id' => 31,
+			'uid' => 'cancelled-uid',
+			'objects' => [[
+				'X-NEXTCLOUD-PROJECT-ID' => [['6', []]],
+				'STATUS' => ['CANCELLED', []],
+				'DTSTART' => [new \DateTimeImmutable('2026-07-27T10:00:00+00:00'), []],
+			]],
+		]]);
+		$this->calendarManager->method('getCalendarsForPrincipal')->willReturn([$calendar]);
+
+		$result = $this->service->listProjectItems($this->user, 6, 20, 0);
+
+		$this->assertSame([], $result);
 	}
 
 	public function testFetchProposalSuccess(): void {
@@ -309,9 +425,12 @@ class ProposalServiceTest extends TestCase {
 
 	public function testModifyProposalSuccess(): void {
 		$proposal = $this->createProposal(1, 'Modified Proposal');
+		$proposal->setUuid('client-supplied-uuid');
 
 		$currentProposalEntry = $this->createProposalEntry(1, 'Current Proposal');
+		$currentProposalEntry->setUuid('server-generated-uuid');
 		$mutatedProposalEntry = $this->createProposalEntry(1, 'Modified Proposal');
+		$mutatedProposalEntry->setUuid('server-generated-uuid');
 
 		// Mock the current proposal fetch
 		$this->proposalMapper->expects($this->exactly(2))
@@ -335,7 +454,8 @@ class ProposalServiceTest extends TestCase {
 			->willReturn([]);
 
 		$this->proposalMapper->expects($this->once())
-			->method('update');
+			->method('update')
+			->with($this->callback(static fn (ProposalDetailsEntry $entry): bool => $entry->getUuid() === 'server-generated-uuid'));
 
 		// Mock calendar manager for syncCalendarBlockers
 		$calendar = $this->createMock(\OCP\Calendar\ICreateFromString::class);
@@ -507,6 +627,7 @@ class ProposalServiceTest extends TestCase {
 		$proposalEntry = $this->createProposalEntry(1, 'Convert Proposal');
 		$proposalEntry->setDuration(60);
 		$proposalEntry->setUuid('uuid-123');
+		$proposalEntry->setProjectId(6);
 		// date entry
 		$dateEntry = new ProposalDateEntry();
 		$dateEntry->setId(10);
@@ -562,7 +683,8 @@ class ProposalServiceTest extends TestCase {
 			$calendar->expects($this->once())
 				->method('createFromString')
 				->with($this->callback(fn ($name) => str_ends_with($name, '.ics')),
-					$this->callback(fn ($data) => str_contains($data, 'SUMMARY:Convert Proposal')));
+					$this->callback(fn ($data) => str_contains($data, 'SUMMARY:Convert Proposal')
+						&& str_contains($data, 'X-NEXTCLOUD-PROJECT-ID:6')));
 		}
 		$this->calendarManager->method('getPrimaryCalendar')->with('testuser')->willReturn($calendar);
 
@@ -579,6 +701,9 @@ class ProposalServiceTest extends TestCase {
 		$this->proposalMapper->expects($this->once())
 			->method('deleteById')
 			->with('testuser', 1);
+		$this->projectEventMapper->expects($this->once())
+			->method('link')
+			->with('uuid-123', 6);
 
 		// the internal participant must be looked up and notified of the finalised event via iTIP
 		$participantUser = $this->createMock(IUser::class);

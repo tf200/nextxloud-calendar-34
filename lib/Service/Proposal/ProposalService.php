@@ -9,8 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Calendar\Service\Proposal;
 
+use DateInterval;
+use DateTimeImmutable;
+use DateTimeInterface;
 use DateTimeZone;
 use Exception;
+use OCA\Calendar\Db\ProjectEventMapper;
 use OCA\Calendar\Db\ProposalDateMapper;
 use OCA\Calendar\Db\ProposalMapper;
 use OCA\Calendar\Db\ProposalParticipantMapper;
@@ -47,6 +51,7 @@ use Sabre\VObject\Component\VEvent;
 use Symfony\Component\Uid\Uuid;
 
 class ProposalService {
+	private const PROJECT_ID_PROPERTY = 'X-NEXTCLOUD-PROJECT-ID';
 
 	public function __construct(
 		private IAppConfig $appConfig,
@@ -55,6 +60,7 @@ class ProposalService {
 		private ProposalParticipantMapper $proposalParticipantMapper,
 		private ProposalDateMapper $proposalDateMapper,
 		private ProposalVoteMapper $proposalVoteMapper,
+		private ProjectEventMapper $projectEventMapper,
 		private IL10N $l10n,
 		private IURLGenerator $urlGenerator,
 		private IUserConfig $userConfig,
@@ -66,11 +72,109 @@ class ProposalService {
 	}
 
 	public function listProposals(IUser $user): ProposalCollection {
-		// retrieve all proposals, participants, dates, and votes for the user
 		$proposalEntries = $this->proposalMapper->fetchByUserId($user->getUID());
-		$proposalParticipantEntries = $this->proposalParticipantMapper->fetchByUserId($user->getUID());
-		$proposalDateEntries = $this->proposalDateMapper->fetchByUserId($user->getUID());
-		$proposalVoteEntries = $this->proposalVoteMapper->fetchByUserId($user->getUID());
+		return $this->buildProposalCollection($user->getUID(), $proposalEntries);
+	}
+
+	/**
+	 * Return active proposals and confirmed meetings linked to a project.
+	 */
+	public function listProjectItems(IUser $user, int $projectId, int $limit, int $offset): array {
+		$proposalEntries = $this->proposalMapper->fetchByUserIdAndProjectId($user->getUID(), $projectId);
+		$proposals = $this->buildProposalCollection($user->getUID(), $proposalEntries);
+		$items = [];
+
+		foreach ($proposals as $proposal) {
+			$participants = [];
+			foreach ($proposal->getParticipants() as $participant) {
+				$participants[] = [
+					'name' => $participant->getName(),
+					'address' => $participant->getAddress(),
+					'status' => match ($participant->getStatus()) {
+						ProposalParticipantStatus::Pending => 'needs-action',
+						ProposalParticipantStatus::Responded => 'responded',
+					},
+				];
+			}
+
+			$dates = $proposal->getDates()->toJson();
+			$sortTimestamp = 0;
+			foreach ($proposal->getDates() as $date) {
+				$sortTimestamp = max($sortTimestamp, $date->getDate()->getTimestamp());
+			}
+
+			$items[] = [
+				'sortTimestamp' => $sortTimestamp,
+				'item' => [
+					'@type' => 'MeetingProposal',
+					'id' => $proposal->getId(),
+					'projectId' => $proposal->getProjectId(),
+					'title' => $proposal->getTitle(),
+					'description' => $proposal->getDescription(),
+					'location' => $proposal->getLocation(),
+					'duration' => $proposal->getDuration(),
+					'participants' => $participants,
+					'dates' => $dates,
+				],
+			];
+		}
+
+		$calendars = array_filter(
+			$this->calendarManager->getCalendarsForPrincipal('principals/users/' . $user->getUID()),
+			static fn ($calendar): bool => !$calendar->isDeleted()
+				&& (!method_exists($calendar, 'isEnabled') || $calendar->isEnabled()),
+		);
+		$meetingUids = [];
+		foreach ($this->projectEventMapper->fetchByProjectId($projectId) as $projectEvent) {
+			$eventUid = $projectEvent->getEventUid();
+			if (isset($meetingUids[$eventUid])) {
+				continue;
+			}
+
+			foreach ($calendars as $calendar) {
+				$calendarEvents = $calendar->search('', [], [
+					'types' => ['VEVENT'],
+					'uid' => $eventUid,
+				]);
+				foreach ($calendarEvents as $calendarEvent) {
+					foreach ($calendarEvent['objects'] ?? [] as $eventObject) {
+						if ((string)$this->getCalendarPropertyValue($eventObject, self::PROJECT_ID_PROPERTY) !== (string)$projectId) {
+							continue;
+						}
+						if (strtoupper((string)$this->getCalendarPropertyValue($eventObject, 'STATUS')) === 'CANCELLED') {
+							continue;
+						}
+
+						$meeting = $this->buildMeetingItem($calendarEvent, $eventObject, $projectId);
+						if ($meeting !== null) {
+							$meetingUids[$eventUid] = true;
+							$items[] = $meeting;
+							break 3;
+						}
+					}
+				}
+			}
+		}
+
+		usort($items, static function (array $first, array $second): int {
+			$timestampComparison = $second['sortTimestamp'] <=> $first['sortTimestamp'];
+			if ($timestampComparison !== 0) {
+				return $timestampComparison;
+			}
+			return strcmp((string)$first['item']['id'], (string)$second['item']['id']);
+		});
+
+		return array_values(array_map(
+			static fn (array $entry): array => $entry['item'],
+			array_slice($items, $offset, $limit),
+		));
+	}
+
+	private function buildProposalCollection(string $userId, array $proposalEntries): ProposalCollection {
+		// Retrieve all related entries once and organize them by proposal ID.
+		$proposalParticipantEntries = $this->proposalParticipantMapper->fetchByUserId($userId);
+		$proposalDateEntries = $this->proposalDateMapper->fetchByUserId($userId);
+		$proposalVoteEntries = $this->proposalVoteMapper->fetchByUserId($userId);
 		// organize the participant entries by proposal ID ['pid' => [participant, ...]]
 		$proposalParticipantEntries = array_reduce(
 			$proposalParticipantEntries,
@@ -226,6 +330,7 @@ class ProposalService {
 		$mutatedProposalEntry = $mutatedProposal->toStore();
 		$mutatedProposalEntry->setId($currentProposal->getId());
 		$mutatedProposalEntry->setUid($user->getUID());
+		$mutatedProposalEntry->setUuid($currentProposal->getUuid());
 		$this->proposalMapper->update($mutatedProposalEntry);
 		// compare, convert and store participants objects
 		$participantDelta = $currentProposal->getParticipants()->compare($mutatedProposal->getParticipants());
@@ -341,12 +446,16 @@ class ProposalService {
 		$vObject = new VCalendar();
 		/** @var \Sabre\VObject\Component\VEvent $vEvent */
 		$vEvent = $vObject->add('VEVENT', []);
-		$vEvent->UID->setValue($proposal->getUuid() ?? Uuid::v4()->toRfc4122());
+		$eventUid = $proposal->getUuid() ?? Uuid::v4()->toRfc4122();
+		$vEvent->UID->setValue($eventUid);
 		$vEvent->add('DTSTART', $eventTimezone ? $selectedDate->getDate()->setTimezone($eventTimezone) : $selectedDate->getDate());
 		$vEvent->add('DTEND', (clone $vEvent->DTSTART->getDateTime())->add(new \DateInterval("PT{$proposal->getDuration()}M")));
 		$vEvent->add('SEQUENCE', 1);
 		$vEvent->add('SUMMARY', $proposal->getTitle());
 		$vEvent->add('DESCRIPTION', $proposal->getDescription());
+		if ($proposal->getProjectId() !== null) {
+			$vEvent->add(self::PROJECT_ID_PROPERTY, (string)$proposal->getProjectId());
+		}
 		if ($talkRoomUri !== null) {
 			$vEvent->add('LOCATION', $talkRoomUri);
 		} elseif (!empty($proposal->getLocation())) {
@@ -363,6 +472,10 @@ class ProposalService {
 				'PARTSTAT' => $eventAttendancePreset ? $this->convertProposalAttendeeAttendance($selectedDate, $participant, $proposal->getVotes()) : 'NEEDS-ACTION',
 				'ROLE' => 'REQ-PARTICIPANT'
 			]);
+		}
+
+		if ($proposal->getProjectId() !== null) {
+			$this->projectEventMapper->link($eventUid, $proposal->getProjectId());
 		}
 
 		// convert existing calendar blocker to event if it exists, otherwise create a new event in the user's calendar
@@ -397,6 +510,80 @@ class ProposalService {
 			ProposalDateVote::Maybe => 'TENTATIVE',
 			default => 'NEEDS-ACTION',
 		};
+	}
+
+	private function buildMeetingItem(array $calendarEvent, array $eventObject, int $projectId): ?array {
+		$start = $this->getCalendarPropertyValue($eventObject, 'DTSTART');
+		if (!$start instanceof DateTimeInterface) {
+			return null;
+		}
+
+		$end = $this->getCalendarPropertyValue($eventObject, 'DTEND');
+		if (!$end instanceof DateTimeInterface) {
+			$duration = $this->getCalendarPropertyValue($eventObject, 'DURATION');
+			if (is_string($duration)) {
+				try {
+					$end = DateTimeImmutable::createFromInterface($start)->add(new DateInterval($duration));
+				} catch (Exception) {
+					$end = null;
+				}
+			}
+		}
+
+		$participants = [];
+		foreach ($eventObject['ATTENDEE'] ?? [] as $attendee) {
+			if (!is_array($attendee)) {
+				continue;
+			}
+			$address = preg_replace('/^mailto:/i', '', (string)($attendee[0] ?? ''));
+			$participants[] = [
+				'name' => $this->getCalendarParameterValue($attendee, 'CN') ?? $address,
+				'address' => $address,
+				'status' => strtolower($this->getCalendarParameterValue($attendee, 'PARTSTAT') ?? 'needs-action'),
+			];
+		}
+
+		$durationMinutes = 0;
+		if ($end instanceof DateTimeInterface) {
+			$durationMinutes = max(0, (int)(($end->getTimestamp() - $start->getTimestamp()) / 60));
+		}
+
+		return [
+			'sortTimestamp' => $start->getTimestamp(),
+			'item' => [
+				'@type' => 'Meeting',
+				'id' => $calendarEvent['id'] ?? $calendarEvent['uid'] ?? null,
+				'uid' => $calendarEvent['uid'] ?? null,
+				'projectId' => $projectId,
+				'title' => $this->getCalendarPropertyValue($eventObject, 'SUMMARY') ?? '',
+				'description' => $this->getCalendarPropertyValue($eventObject, 'DESCRIPTION') ?? '',
+				'location' => $this->getCalendarPropertyValue($eventObject, 'LOCATION') ?? '',
+				'duration' => $durationMinutes,
+				'startDate' => $start->format(DateTimeInterface::ATOM),
+				'endDate' => $end?->format(DateTimeInterface::ATOM),
+				'participants' => $participants,
+			],
+		];
+	}
+
+	private function getCalendarPropertyValue(array $eventObject, string $propertyName): mixed {
+		$property = $eventObject[$propertyName] ?? null;
+		if (!is_array($property) || !array_key_exists(0, $property)) {
+			return null;
+		}
+
+		if (is_array($property[0])) {
+			return $property[0][0] ?? null;
+		}
+		return $property[0];
+	}
+
+	private function getCalendarParameterValue(array $property, string $parameterName): ?string {
+		$parameter = $property[1][$parameterName] ?? null;
+		if (is_object($parameter) && method_exists($parameter, 'getValue')) {
+			return (string)$parameter->getValue();
+		}
+		return is_scalar($parameter) ? (string)$parameter : null;
 	}
 
 	public function deleteProposalsByUser(string $user): void {
