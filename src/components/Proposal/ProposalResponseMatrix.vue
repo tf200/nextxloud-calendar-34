@@ -45,13 +45,38 @@
 					v-for="(group, groupIndex) in datesGrouped"
 					:key="group.key || groupIndex">
 					<tr class="proposal-matrix__table-row-label">
-						<td class="proposal-matrix__table-day-label">
+						<td class="proposal-matrix__table-day-label" :colspan="columnCount">
 							{{ group.label }}
 						</td>
 					</tr>
 					<tr v-for="date in group.dates" :key="date.id" class="proposal-matrix__table-row">
 						<td class="proposal-matrix__table-day-time">
-							{{ dateTimeSpan(date.date) }}
+							<div class="proposal-matrix__table-day-time-text">
+								{{ dateTimeSpan(date.date) }}
+							</div>
+							<div
+								v-if="proposal.participants.length > 0"
+								class="proposal-matrix__vote-breakdown"
+								:aria-label="t('calendar', '{yes} accepted, {no} refused, {maybe} maybe', dateVoteCounts(date.id))">
+								<span
+									class="vote-badge vote-badge--yes"
+									:title="t('calendar', '{count} accepted', { count: dateVoteCounts(date.id).yes })">
+									<VoteYesIcon :size="14" />
+									<span class="vote-badge__count">{{ dateVoteCounts(date.id).yes }}</span>
+								</span>
+								<span
+									class="vote-badge vote-badge--no"
+									:title="t('calendar', '{count} refused', { count: dateVoteCounts(date.id).no })">
+									<VoteNoIcon :size="14" />
+									<span class="vote-badge__count">{{ dateVoteCounts(date.id).no }}</span>
+								</span>
+								<span
+									class="vote-badge vote-badge--maybe"
+									:title="t('calendar', '{count} maybe', { count: dateVoteCounts(date.id).maybe })">
+									<VoteMaybeIcon :size="14" />
+									<span class="vote-badge__count">{{ dateVoteCounts(date.id).maybe }}</span>
+								</span>
+							</div>
 						</td>
 						<td v-if="mode === 'participant'" class="proposal-matrix__table-actions-participant">
 							<div class="voting-options-container">
@@ -128,14 +153,14 @@ import type { ProposalDate } from '@/models/proposals/proposals'
 
 import { t } from '@nextcloud/l10n'
 import moment from '@nextcloud/moment'
-import CreateIcon from 'vue-material-design-icons/CalendarOutline'
-import VoteYesIcon from 'vue-material-design-icons/Check'
-import VoteNoIcon from 'vue-material-design-icons/Close'
-import VoteMaybeIcon from 'vue-material-design-icons/Help'
-import VoteNoneIcon from 'vue-material-design-icons/Minus'
 import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import CreateIcon from 'vue-material-design-icons/CalendarOutline.vue'
+import VoteYesIcon from 'vue-material-design-icons/Check.vue'
+import VoteNoIcon from 'vue-material-design-icons/Close.vue'
+import VoteMaybeIcon from 'vue-material-design-icons/Help.vue'
+import VoteNoneIcon from 'vue-material-design-icons/Minus.vue'
 import { Proposal, ProposalResponse } from '@/models/proposals/proposals'
 import { getTimezoneOffset } from '@/services/timezoneOffsetService'
 import { ProposalDateVote } from '@/types/proposals/proposalEnums'
@@ -297,6 +322,32 @@ export default {
 			const vote = this.proposal.votes.find((v) => v.participant === participantId && v.date === dateId)
 
 			return vote ? vote.vote : null // null indicates no response
+		},
+
+		dateVoteCounts(dateId: number | null): { yes: number, no: number, maybe: number, none: number, total: number } {
+			if (!this.proposal || !dateId) {
+				return { yes: 0, no: 0, maybe: 0, none: 0, total: 0 }
+			}
+			let yes = 0
+			let no = 0
+			let maybe = 0
+			let none = 0
+			for (const participant of this.proposal.participants) {
+				if (participant.id === null) {
+					continue
+				}
+				const vote = this.participantVote(participant.id, dateId)
+				if (vote === ProposalDateVote.Yes) {
+					yes++
+				} else if (vote === ProposalDateVote.No) {
+					no++
+				} else if (vote === ProposalDateVote.Maybe) {
+					maybe++
+				} else {
+					none++
+				}
+			}
+			return { yes, no, maybe, none, total: this.proposal.participants.length }
 		},
 	},
 }
@@ -476,6 +527,60 @@ export default {
 
 	:deep(.material-design-icon.help-icon svg) {
 		height: 18px;
+	}
+}
+
+.proposal-matrix__table-day-time {
+	vertical-align: middle;
+	padding-inline: calc(var(--default-grid-baseline) * 2);
+	padding-block: calc(var(--default-grid-baseline) * 2);
+	white-space: nowrap;
+}
+
+.proposal-matrix__table-day-time-text {
+	font-weight: 500;
+	color: var(--color-text-primary);
+}
+
+.proposal-matrix__vote-breakdown {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--default-grid-baseline) * 1);
+	margin-top: calc(var(--default-grid-baseline) * 1);
+}
+
+.vote-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--default-grid-baseline) * 0.5);
+	padding-inline: calc(var(--default-grid-baseline) * 1.5);
+	padding-block: calc(var(--default-grid-baseline) * 0.5);
+	border-radius: var(--border-radius-pill);
+	line-height: 1;
+	font-weight: 600;
+
+	&--yes {
+		color: #32CD32;
+		background-color: rgba(50, 205, 50, 0.12);
+	}
+
+	&--no {
+		color: #ff4402;
+		background-color: rgba(255, 68, 2, 0.12);
+	}
+
+	&--maybe {
+		color: #ffc107;
+		background-color: rgba(255, 193, 7, 0.12);
+	}
+
+	.vote-badge__count {
+		font-size: 0.8rem;
+	}
+
+	:deep(.material-design-icon svg) {
+		stroke: currentColor;
+		stroke-width: 1.2px;
 	}
 }
 
