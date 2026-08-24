@@ -15,7 +15,7 @@
 			<!-- Show proposal viewer -->
 			<div v-if="modalMode === 'view'" class="proposal-viewer__content">
 				<div class="proposal-viewer__content-title">
-					{{ selectedProposal?.title }}
+					{{ proposalViewerTitle }}
 				</div>
 				<div class="proposal-viewer__content-description">
 					{{ selectedProposal?.description || t('calendar', 'No Description') }}
@@ -218,6 +218,7 @@ import FullCalendarTimeGrid from '@fullcalendar/timegrid'
 import FullCalendar from '@fullcalendar/vue3'
 import { AttendeeProperty } from '@nextcloud/calendar-js'
 import { showError, showSuccess } from '@nextcloud/dialogs'
+import { loadState } from '@nextcloud/initial-state'
 import { t } from '@nextcloud/l10n'
 import moment from '@nextcloud/moment'
 import PreviousSpanIcon from 'vue-material-design-icons/ChevronLeft'
@@ -234,12 +235,9 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcModal from '@nextcloud/vue/components/NcModal'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import NcSelect from '@nextcloud/vue/components/NcSelect'
-import axios from '@nextcloud/axios'
-import { generateUrl } from '@nextcloud/router'
-import { loadState } from '@nextcloud/initial-state'
 import DurationSelector from '@/components/Editor/DurationSelector.vue'
 import InviteesListSearch from '@/components/Editor/Invitees/InviteesListSearch.vue'
 import ProposalDateItem from '@/components/Proposal/ProposalDateItem.vue'
@@ -320,7 +318,6 @@ export default {
 			calendarSpanDays: 7, // Currently applied span (derived)
 			screenWidth: window.innerWidth, // Track screen width
 			projectsEnabled: loadState('calendar', 'projects_enabled', false),
-			projects: [] as any[],
 			showDeleteDialog: false,
 			pendingDeleteProposal: null as Proposal | null,
 			showConvertDialog: false,
@@ -392,8 +389,15 @@ export default {
 			}
 		},
 
+		proposalViewerTitle(): string {
+			if (!this.selectedProposal) {
+				return ''
+			}
+			return this.proposalStore.formatProposalTitle(this.selectedProposal)
+		},
+
 		projectOptions(): Array<{ id: number | null, label: string }> {
-			return this.projects.map((p: any) => ({ id: p.id, label: p.name }))
+			return this.proposalStore.projects.map((p) => ({ id: p.id, label: p.name }))
 		},
 
 		selectedProjectOption: {
@@ -401,14 +405,15 @@ export default {
 				if (!this.selectedProposal || !this.selectedProposal.projectId) {
 					return null
 				}
-				const project = this.projects.find((p: any) => p.id === this.selectedProposal.projectId)
+				const project = this.proposalStore.getProjectById(this.selectedProposal.projectId)
 				return project ? { id: project.id, label: project.name } : null
 			},
+
 			set(val: { id: number | null, label: string } | null) {
 				if (this.selectedProposal) {
 					this.selectedProposal.projectId = val ? val.id : null
 				}
-			}
+			},
 		},
 
 		/**
@@ -473,7 +478,7 @@ export default {
 		},
 
 		deleteDialogMessage(): string {
-			const title = this.pendingDeleteProposal?.title ?? t('calendar', 'No title')
+			const title = this.pendingDeleteProposal ? this.proposalStore.formatProposalTitle(this.pendingDeleteProposal) : t('calendar', 'No title')
 			return t('calendar', 'Are you sure you want to delete "{title}"?', { title })
 		},
 
@@ -597,15 +602,7 @@ export default {
 		t,
 
 		async fetchProjects() {
-			if (!this.projectsEnabled) {
-				return
-			}
-			try {
-				const response = await axios.get(generateUrl('/apps/projectcreatoraio/api/v1/projects/mine'))
-				this.projects = response.data
-			} catch (error) {
-				console.error('Failed to fetch projects list:', error)
-			}
+			await this.proposalStore.fetchProjects()
 		},
 
 		onWindowResize(): void {
@@ -663,7 +660,8 @@ export default {
 				if (!this.selectedProposal) {
 					return console.error('No proposal selected for this operation')
 				}
-				showSuccess(t('calendar', 'Saving proposal "{title}"', { title: this.selectedProposal.title ?? t('calendar', 'No title') }))
+				const title = this.proposalStore.formatProposalTitle(this.selectedProposal) || t('calendar', 'No title')
+				showSuccess(t('calendar', 'Saving proposal "{title}"', { title }))
 				await this.proposalStore.storeProposal(this.selectedProposal)
 				showSuccess(t('calendar', 'Successfully saved proposal'))
 				this.onModalClose()
@@ -814,7 +812,8 @@ export default {
 				return
 			}
 			try {
-				showSuccess(t('calendar', 'Deleting proposal "{title}"', { title: proposal.title ?? t('calendar', 'No title') }))
+				const title = this.proposalStore.formatProposalTitle(proposal) || t('calendar', 'No title')
+				showSuccess(t('calendar', 'Deleting proposal "{title}"', { title }))
 				await this.proposalStore.destroyProposal(proposal)
 				showSuccess(t('calendar', 'Successfully deleted proposal'))
 				this.onModalClose()

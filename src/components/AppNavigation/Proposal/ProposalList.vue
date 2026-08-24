@@ -41,7 +41,7 @@
 			<NcAppNavigationItem
 				v-for="proposal in storedProposals"
 				:key="proposal.id"
-				:name="proposal.title"
+				:name="proposalDisplayName(proposal)"
 				class="proposal-list__item"
 				@click="onProposalView(proposal)">
 				<template v-if="proposalParticipantsTotal(proposal) === proposalParticipantsResponded(proposal)" #icon>
@@ -155,7 +155,7 @@ export default {
 		},
 
 		deleteDialogMessage(): string {
-			const title = this.pendingDeleteProposal?.title ?? t('calendar', 'No title')
+			const title = this.pendingDeleteProposal ? this.proposalDisplayName(this.pendingDeleteProposal) : t('calendar', 'No title')
 			return t('calendar', 'Are you sure you want to delete "{title}"?', { title })
 		},
 
@@ -193,6 +193,10 @@ export default {
 
 		generateUrl,
 
+		proposalDisplayName(proposal: Proposal): string {
+			return this.proposalStore.formatProposalTitle(proposal) || t('calendar', 'No title')
+		},
+
 		onProposalView(proposal: Proposal) {
 			this.proposalStore.showModal('view', proposal)
 		},
@@ -218,7 +222,8 @@ export default {
 				return
 			}
 			try {
-				showSuccess(t('calendar', 'Deleting proposal "{title}"', { title: proposal.title ?? t('calendar', 'No title') }))
+				const title = this.proposalDisplayName(proposal)
+				showSuccess(t('calendar', 'Deleting proposal "{title}"', { title }))
 				await this.proposalStore.destroyProposal(proposal)
 				showSuccess(t('calendar', 'Successfully deleted proposal'))
 				this.fetchProposals()
@@ -229,6 +234,9 @@ export default {
 
 		async fetchProposals() {
 			try {
+				if (this.proposalStore.projectsEnabled && !this.proposalStore.projectsLoaded) {
+					this.proposalStore.fetchProjects()
+				}
 				this.storedProposals = await this.proposalStore.listProposals()
 			} catch (error) {
 				showError(t('calendar', 'Failed to retrieve proposals'))

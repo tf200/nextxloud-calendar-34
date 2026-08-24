@@ -5,20 +5,79 @@
 
 import type { ProposalDateInterface, ProposalInterface, ProposalResponseInterface } from '@/types/proposals/proposalInterfaces'
 
+import axios from '@nextcloud/axios'
+import { loadState } from '@nextcloud/initial-state'
+import { generateUrl } from '@nextcloud/router'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { Proposal } from '@/models/proposals/proposals'
 import { proposalService } from '@/services/proposalService'
 import { createRoomFromProposal, generateRoomUrl } from '@/services/talkService'
 import useSettingsStore from '@/store/settings'
-import axios from '@nextcloud/axios'
-import { generateUrl } from '@nextcloud/router'
-import { loadState } from '@nextcloud/initial-state'
+
+export interface ProjectItem {
+	id: number
+	name: string
+	talk_conversation_token?: string
+	[key: string]: unknown
+}
 
 export default defineStore('proposal', () => {
 	const modalVisible = ref(false)
 	const modalMode = ref<'view' | 'create' | 'modify'>('view')
 	const modalProposal = ref<ProposalInterface | null>(null)
+	const projects = ref<ProjectItem[]>([])
+	const projectsLoaded = ref(false)
+	const projectsEnabled = ref(loadState('calendar', 'projects_enabled', false))
+
+	/**
+	 * Fetch the list of projects available to the current user.
+	 */
+	async function fetchProjects(): Promise<ProjectItem[]> {
+		if (!projectsEnabled.value) {
+			return []
+		}
+		try {
+			const response = await axios.get(generateUrl('/apps/projectcreatoraio/api/v1/projects/mine'))
+			projects.value = response.data
+			projectsLoaded.value = true
+			return projects.value
+		} catch (error) {
+			console.error('Failed to fetch projects list:', error)
+			return []
+		}
+	}
+
+	/**
+	 * Get a project by its ID from the cached projects list.
+	 *
+	 * @param projectId - The project identifier.
+	 */
+	function getProjectById(projectId: number | null): ProjectItem | null {
+		if (!projectId) {
+			return null
+		}
+		return projects.value.find((p) => p.id === projectId) ?? null
+	}
+
+	/**
+	 * Get formatted proposal title with linked project prefix if available.
+	 *
+	 * @param proposal - The proposal object.
+	 */
+	function formatProposalTitle(proposal: ProposalInterface | null): string {
+		if (!proposal) {
+			return ''
+		}
+		const title = proposal.title ?? ''
+		if (proposal.projectId) {
+			const project = getProjectById(proposal.projectId)
+			if (project && project.name) {
+				return `[${project.name}] ${title}`
+			}
+		}
+		return title
+	}
 
 	/**
 	 * Show the proposal modal dialog.
@@ -117,16 +176,20 @@ export default defineStore('proposal', () => {
 
 		if (settingsStore.talkEnabled && proposal.location === 'Talk conversation') {
 			let talkRoomUri = null
-			const projectsEnabled = loadState('calendar', 'projects_enabled', false)
-			if (projectsEnabled && proposal.projectId) {
-				try {
-					const response = await axios.get(generateUrl('/apps/projectcreatoraio/api/v1/projects/' + proposal.projectId))
-					const project = response.data
-					if (project && project.talk_conversation_token) {
-						talkRoomUri = generateRoomUrl(project.talk_conversation_token)
+			if (projectsEnabled.value && proposal.projectId) {
+				const project = getProjectById(proposal.projectId)
+				if (project && project.talk_conversation_token) {
+					talkRoomUri = generateRoomUrl(project.talk_conversation_token)
+				} else {
+					try {
+						const response = await axios.get(generateUrl('/apps/projectcreatoraio/api/v1/projects/' + proposal.projectId))
+						const fetchedProject = response.data
+						if (fetchedProject && fetchedProject.talk_conversation_token) {
+							talkRoomUri = generateRoomUrl(fetchedProject.talk_conversation_token)
+						}
+					} catch (err) {
+						console.error('Failed to fetch linked project Talk room', err)
 					}
-				} catch (err) {
-					console.error('Failed to fetch linked project Talk room', err)
 				}
 			}
 
@@ -153,6 +216,9 @@ export default defineStore('proposal', () => {
 		modalVisible,
 		modalMode,
 		modalProposal,
+		projects,
+		projectsLoaded,
+		projectsEnabled,
 		showModal,
 		hideModal,
 		listProposals,
@@ -161,5 +227,8 @@ export default defineStore('proposal', () => {
 		destroyProposal,
 		convertProposal,
 		storeResponse,
+		fetchProjects,
+		getProjectById,
+		formatProposalTitle,
 	}
 })
