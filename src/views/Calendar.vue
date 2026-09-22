@@ -36,11 +36,6 @@
 					<ProposalList />
 				</template>
 
-				<!-- Appointment Configuration List -->
-				<template v-if="!disableAppointments && isAuthenticatedUser">
-					<AppointmentConfigList />
-				</template>
-
 				<!-- Trashbin -->
 				<Trashbin v-if="calendarsStore.hasTrashBin" />
 			</template>
@@ -108,7 +103,6 @@ import {
 import { mapState, mapStores } from 'pinia'
 import PlaylistCheckIcon from 'vue-material-design-icons/PlaylistCheck.vue'
 import AppNavigationHeader from '../components/AppNavigation/AppNavigationHeader.vue'
-import AppointmentConfigList from '../components/AppNavigation/AppointmentConfigList.vue'
 import CalendarList from '../components/AppNavigation/CalendarList.vue'
 import Trashbin from '../components/AppNavigation/CalendarList/Trashbin.vue'
 import EditCalendarModal from '../components/AppNavigation/EditCalendarModal.vue'
@@ -153,7 +147,6 @@ import '@nextcloud/dialogs/style.css'
 export default {
 	name: 'Calendar',
 	components: {
-		AppointmentConfigList,
 		UnscheduledTasksList,
 		CalendarGrid,
 		EmptyCalendar,
@@ -229,7 +222,6 @@ export default {
 
 		...mapState(useSettingsStore, [
 			'timezone',
-			'disableAppointments',
 			'tasksSidebar',
 		]),
 
